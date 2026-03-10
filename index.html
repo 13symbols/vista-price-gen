@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Генератор Прайсів - ВІСТА</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&family=Cormorant+Garamond:ital,wght@1,600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        body { background: #f1f5f9; font-family: 'Inter', sans-serif; transition: background-color 0.4s ease; }
+        
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #fff !important; padding: 0; margin: 0; }
+            .page { 
+                width: 210mm; 
+                height: 297mm; 
+                padding: 10mm 15mm !important; 
+                margin: 0 auto; 
+                border: none !important; 
+                display: flex !important;
+                flex-direction: column;
+                page-break-after: always;
+                box-sizing: border-box;
+            }
+            .page:last-child {
+                page-break-after: auto !important;
+            }
+        }
+
+        .page {
+            background: #fff;
+            width: 210mm;
+            height: 297mm;
+            margin: 20px auto;
+            padding: 10mm 15mm;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            position: relative;
+            box-sizing: border-box;
+            overflow: hidden;
+            color: #000; 
+        }
+
+        .category-toggle .active-mattress { background-color: #3b82f6; color: #fff; }
+        .category-toggle .active-futon { background-color: #14b8a6; color: #fff; }
+
+        .admin-bg-mattress { background-color: #dbeafe; }
+        .admin-bg-futon { background-color: #ccfbf1; }
+
+        .items-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .item-row { 
+            display: flex; 
+            align-items: center; 
+            width: 100%; 
+            flex: 1; 
+            min-height: 38px; 
+            max-height: 105px; 
+            box-sizing: border-box;
+            transition: all 0.3s ease;
+            border-radius: 8px;
+            padding: 0 8px;
+        }
+        .item-row:nth-child(even) {
+            background-color: #dde3ea;
+        }
+        
+        .item-name, .item-size, .item-price, .sku-text {
+            transition: font-size 0.3s ease;
+        }
+
+        .item-num-styled {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 3.8rem;
+            font-weight: 600;
+            font-style: italic;
+            color: #d4d4d4;
+            line-height: 1;
+            letter-spacing: -0.03em;
+            width: 52px;
+            flex-shrink: 0;
+            text-align: right;
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+        
+        .compact-mode .item-name { font-size: 1.25rem !important; line-height: 1.1 !important; }
+        .compact-mode .item-size { font-size: 1.35rem !important; }
+        .compact-mode .item-price { font-size: 1.4rem !important; }
+        .compact-mode .item-num-styled { font-size: 2.6rem !important; width: 40px !important; }
+        .compact-mode .sku-text { font-size: 0.85rem !important; }
+        .compact-mode .item-label { font-size: 7px !important; }
+
+        .pre-order-tag {
+            font-size: 9px;
+            border: 1px solid #000;
+            padding: 1px 6px;
+            text-transform: uppercase;
+            font-weight: 700;
+            margin-left: 12px;
+            white-space: nowrap;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        .admin-item-card { border-left-width: 4px; transition: all 0.2s ease; }
+        .admin-item-card:hover { transform: translateX(3px); background: #fff; }
+        .admin-item-card.type-mattress { border-left-color: #3b82f6; }
+        .admin-item-card.type-futon { border-left-color: #14b8a6; }
+        
+        .drag-handle { cursor: grab; }
+        
+        .page-footer {
+            border-top: 2px solid #000;
+            padding-top: 8px;
+            margin-top: auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            background: white;
+        }
+
+        .footer-text-bold { font-weight: 900; text-transform: uppercase; font-size: 12px; letter-spacing: -0.01em; line-height: 1; }
+        .footer-sub { font-size: 9px; font-weight: 300; text-transform: uppercase; margin-top: 2px; }
+
+        .admin-container { max-width: 1100px; margin: 0 auto; }
+
+        body.pdf-exporting { background: #fff !important; padding: 0 !important; margin: 0 !important; overflow-y: hidden !important; height: auto !important; }
+        body.pdf-exporting .page { 
+            margin: 0 !important; 
+            box-shadow: none !important; 
+            border: none !important; 
+            height: 296.5mm !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
+        }
+        body.pdf-exporting .no-print { display: none !important; height: 0 !important; overflow: hidden !important; }
+        body.pdf-exporting #print-area, body.pdf-exporting #pages-container { margin: 0 !important; padding: 0 !important; }
+        body.pdf-exporting .item-num-styled { color: #7a7a7a !important; }
+
+        .admin-container .field-label { font-size: 11px; font-weight: 900; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px; letter-spacing: 0.05em; }
+        .admin-container input[type="text"] { font-size: 13px !important; }
+        .admin-container .category-toggle button { font-size: 11px !important; }
+        .admin-container .pdf-btn-label { font-size: 10px !important; }
+        .admin-container .pdf-action-btn { font-size: 11px !important; }
+        .admin-container .preorder-label { font-size: 11px !important; }
+
+        .spoiler-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-in-out;
+        }
+        .spoiler-content.open {
+            max-height: 800px;
+        }
+        .spoiler-dynamic-content {
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            overflow-wrap: break-word;
+        }
+        .spoiler-dynamic-content.active {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="pb-20">
+
+    <div class="no-print px-4 py-4">
+        <div class="admin-container">
+            <div id="admin-main-card" class="admin-bg-mattress rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+                <div class="grid grid-cols-1 md:grid-cols-12 border-b border-slate-200/50">
+                    <div class="md:col-span-8 p-5">
+                        <input type="hidden" id="edit-id" value="">
+                        <div class="flex flex-col gap-4">
+                            <div class="flex items-end gap-3">
+                                <div class="w-40 shrink-0">
+                                    <label class="field-label">Тип товару</label>
+                                    <div class="category-toggle flex p-1 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-lg">
+                                        <button onclick="setType('mattress')" id="btn-mattress" class="flex-1 py-1 rounded-md font-black uppercase transition-all active-mattress">Матраци</button>
+                                        <button onclick="setType('futon')" id="btn-futon" class="flex-1 py-1 rounded-md font-black uppercase transition-all">Футони</button>
+                                    </div>
+                                </div>
+                                <div class="flex-grow">
+                                    <label class="field-label">Назва</label>
+                                    <input type="text" id="input-name" class="w-full bg-white border border-slate-200 rounded-lg p-2 font-black outline-none" placeholder="Тайм">
+                                </div>
+                                <div class="w-28 shrink-0">
+                                    <label class="field-label">Артикул</label>
+                                    <input type="text" id="input-sku" class="w-full bg-white border border-slate-200 rounded-lg p-2 font-bold outline-none" placeholder="CF-00">
+                                </div>
+                            </div>
+                            <div class="flex items-end gap-3">
+                                <div class="w-36 relative">
+                                    <label class="field-label">Розмір</label>
+                                    <div class="relative">
+                                        <input type="text" id="input-size" oninput="this.value=this.value.replace(/[^0-9хx×*]/g,'')" class="w-full bg-white border border-slate-200 rounded-lg py-2 pl-2 pr-8 font-black outline-none text-center" placeholder="160х200">
+                                        <button type="button" onclick="toggleDropdown(event, 'size-dropdown')" class="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-indigo-600 transition-colors bg-white rounded">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 9l6 6 6-6"></path></svg>
+                                        </button>
+                                    </div>
+                                    <div id="size-dropdown" class="hidden absolute top-full left-0 mt-2 w-full bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-[180px] overflow-y-auto custom-scrollbar">
+                                        <button type="button" onclick="setSize('80*190')" class="w-full text-center px-3 py-2 text-xs font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border-b border-slate-50 last:border-0">80*190</button>
+                                        <button type="button" onclick="setSize('90*200')" class="w-full text-center px-3 py-2 text-xs font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border-b border-slate-50 last:border-0">90*200</button>
+                                        <button type="button" onclick="setSize('120*190')" class="w-full text-center px-3 py-2 text-xs font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border-b border-slate-50 last:border-0">120*190</button>
+                                        <button type="button" onclick="setSize('120*200')" class="w-full text-center px-3 py-2 text-xs font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border-b border-slate-50 last:border-0">120*200</button>
+                                        <button type="button" onclick="setSize('140*190')" class="w-full text-center px-3 py-2 text-xs font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border-b border-slate-50 last:border-0">140*190</button>
+                                        <button type="button" onclick="setSize('140*200')" class="w-full text-center px-3 py-2 text-xs font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border-b border-slate-50 last:border-0">140*200</button>
+                                        <button type="button" onclick="setSize('160*200')" class="w-full text-center px-3 py-2 text-xs font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border-b border-slate-50 last:border-0">160*200</button>
+                                        <button type="button" onclick="setSize('180*200')" class="w-full text-center px-3 py-2 text-xs font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border-b border-slate-50 last:border-0">180*200</button>
+                                    </div>
+                                </div>
+                                <div class="w-32">
+                                    <label class="field-label">Ціна</label>
+                                    <input type="text" id="input-price" oninput="this.value=this.value.replace(/[^0-9., ]/g,'')" class="w-full bg-white border border-slate-200 rounded-lg p-2 font-black outline-none" placeholder="0">
+                                </div>
+                                <div class="w-32">
+                                    <label class="field-label">Дата прайсу</label>
+                                    <input type="text" id="input-date" class="w-full bg-white border border-slate-200 rounded-lg p-2 font-bold outline-none" oninput="renderPages()">
+                                </div>
+                                <div class="flex items-center self-center h-10 mt-4 px-4 bg-white border border-slate-200 rounded-lg">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" id="input-preorder" class="w-3.5 h-3.5 rounded accent-black">
+                                        <span class="preorder-label font-black uppercase text-slate-500">Під замовлення</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="md:col-span-4 p-5 bg-black/5 border-l border-slate-200/50 flex flex-col justify-center gap-3">
+                        <button onclick="saveItem()" id="main-action-btn" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-black uppercase text-sm tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/30">Додати</button>
+                        
+                        <div class="flex flex-col gap-2 bg-white/60 p-2 rounded-xl border border-slate-200/60 shadow-sm">
+                            <div class="flex items-center gap-2">
+                                <div class="pdf-btn-label font-black uppercase text-blue-500 w-[55px] text-right leading-tight">Матраци:</div>
+                                <button onclick="handlePDF('download', 'mattress')" class="pdf-action-btn flex-1 bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg font-black uppercase hover:border-blue-500 hover:text-blue-600 transition-all">Завантажити</button>
+                                <button onclick="handlePDF('open', 'mattress')" class="pdf-action-btn flex-1 bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg font-black uppercase hover:border-blue-500 hover:text-blue-600 transition-all">Відкрити</button>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="pdf-btn-label font-black uppercase text-teal-500 w-[55px] text-right leading-tight">Футони:</div>
+                                <button onclick="handlePDF('download', 'futon')" class="pdf-action-btn flex-1 bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg font-black uppercase hover:border-teal-500 hover:text-teal-600 transition-all">Завантажити</button>
+                                <button onclick="handlePDF('open', 'futon')" class="pdf-action-btn flex-1 bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg font-black uppercase hover:border-teal-500 hover:text-teal-600 transition-all">Відкрити</button>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button id="cancel-edit-btn" onclick="resetForm()" class="hidden flex-1 bg-slate-200 text-slate-600 py-2 rounded-xl font-black uppercase text-xs">Скасувати</button>
+                            <button onclick="clearAll()" class="flex-1 bg-slate-100 text-slate-400 py-2 rounded-xl font-black uppercase text-xs hover:text-red-500 transition-all">Очистити все</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 bg-white/40">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <div class="flex items-center gap-2 mb-3 border-b border-black/5 pb-2">
+                                <div class="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                                <h4 class="text-[9px] font-black uppercase text-slate-500 tracking-[0.2em]">Матраци</h4>
+                            </div>
+                            <div id="list-mattress" class="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar min-h-[50px]"></div>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2 mb-3 border-b border-black/5 pb-2">
+                                <div class="w-1.5 h-1.5 rounded-full bg-teal-500"></div>
+                                <h4 class="text-[9px] font-black uppercase text-slate-500 tracking-[0.2em]">Футони</h4>
+                            </div>
+                            <div id="list-futon" class="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar min-h-[50px]"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="print-area">
+        <template id="page-template">
+            <div class="page">
+                <header class="mb-5 flex justify-between items-end">
+                    <div class="border-l-[10px] border-black pl-4">
+                        <h1 class="page-title text-4xl font-black uppercase tracking-tighter leading-none italic flex items-end"></h1>
+                        <div class="flex items-center mt-2">
+                            <span class="bg-black text-white text-[13px] px-2 py-0.5 font-black uppercase mr-3">ВІСТА</span>
+                            <span class="text-[16px] font-semibold uppercase tracking-[0.15em]">vista.ua</span>
+                        </div>
+                    </div>
+                    <div class="pb-1">
+                        <h2 class="text-4xl font-black uppercase tracking-tighter leading-none italic text-black">COME-FOR</h2>
+                    </div>
+                </header>
+                <div class="items-container"></div>
+                <footer class="page-footer">
+                    <div>
+                        <div class="footer-text-bold">ЦІНА ВКАЗАНА ЗА 1 ШТ.</div>
+                        <div class="footer-sub italic">Зроблено в Україні</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="footer-text-bold price-date">--.--.----</div>
+                        <div class="footer-sub italic">Дата оновлення прайсу</div>
+                    </div>
+                </footer>
+            </div>
+        </template>
+        <div id="pages-container"></div>
+    </div>
+
+    <script>
+        let currentType = 'mattress';
+        // Відсортований масив: спочатку за назвою (Дзен, Чілл, Лайт+, Скейт | Дует, Тайм), потім за розміром
+        let items = [
+            // МАТРАЦИ - Дзен
+            { id: 9, type: 'mattress', name: 'Дзен', sku: '931814', size: '80*190', price: '2147,60', preorder: false },
+            { id: 11, type: 'mattress', name: 'Дзен', sku: '931562', size: '90*200', price: '2516,00', preorder: false },
+            { id: 1, type: 'mattress', name: 'Дзен', sku: '931560', size: '140*200', price: '3600,00', preorder: false },
+            { id: 5, type: 'mattress', name: 'Дзен', sku: '931326', size: '160*200', price: '3968,90', preorder: false },
+            // МАТРАЦИ - Чілл
+            { id: 10, type: 'mattress', name: 'Чілл', sku: '931813', size: '80*190', price: '3417,00', preorder: false },
+            { id: 12, type: 'mattress', name: 'Чілл', sku: '931692', size: '90*200', price: '4009,30', preorder: false },
+            { id: 3, type: 'mattress', name: 'Чілл', sku: '931726', size: '140*200', price: '6411,10', preorder: false },
+            { id: 7, type: 'mattress', name: 'Чілл', sku: '931673', size: '160*200', price: '7407,00', preorder: false },
+            { id: 8, type: 'mattress', name: 'Чілл', sku: '931727', size: '180*200', price: '8394,60', preorder: false },
+            // МАТРАЦИ - Лайт+
+            { id: 4, type: 'mattress', name: 'Лайт+', sku: '931687', size: '160*200', price: '5916,40', preorder: false },
+            // МАТРАЦИ - Скейт
+            { id: 2, type: 'mattress', name: 'Скейт', sku: '931824', size: '140*200', price: '7971,20', preorder: false },
+            { id: 6, type: 'mattress', name: 'Скейт', sku: '931671', size: '160*200', price: '9633,00', preorder: false },
+            
+            // ФУТОНИ - Дует
+            { id: 110, type: 'futon', name: 'Дует', sku: '931816', size: '90*200', price: '1767,70', preorder: false },
+            { id: 101, type: 'futon', name: 'Дует', sku: '93098', size: '120*190', price: '2204,20', preorder: false },
+            { id: 104, type: 'futon', name: 'Дует', sku: '931817', size: '120*200', price: '2234,60', preorder: false },
+            { id: 105, type: 'futon', name: 'Дует', sku: '931818', size: '140*190', price: '2536,20', preorder: false },
+            { id: 107, type: 'futon', name: 'Дует', sku: '931819', size: '140*200', price: '2558,00', preorder: false },
+            // ФУТОНИ - Тайм
+            { id: 109, type: 'futon', name: 'Тайм', sku: '93378', size: '80*190', price: '2471,10', preorder: false },
+            { id: 111, type: 'futon', name: 'Тайм', sku: '93455', size: '90*200', price: '2457,00', preorder: false },
+            { id: 102, type: 'futon', name: 'Тайм', sku: '93745', size: '120*190', price: '3718,00', preorder: false },
+            { id: 103, type: 'futon', name: 'Тайм', sku: '931822', size: '120*200', price: '3265,60', preorder: false },
+            { id: 106, type: 'futon', name: 'Тайм', sku: '931823', size: '140*200', price: '3096,00', preorder: false },
+            { id: 108, type: 'futon', name: 'Тайм', sku: '93099', size: '160*200', price: '4321,30', preorder: false }
+        ];
+
+        window.onload = () => {
+            document.getElementById('input-date').value = new Date().toLocaleDateString('uk-UA');
+            initSortable();
+            render();
+        };
+
+        function toggleDropdown(e, id) {
+            e.stopPropagation();
+            document.getElementById(id).classList.toggle('hidden');
+        }
+
+        document.addEventListener('click', (e) => {
+            const dropdown = document.getElementById('size-dropdown');
+            if (dropdown && !dropdown.classList.contains('hidden') && !e.target.closest('#size-dropdown') && !e.target.closest('button[onclick*="toggleDropdown"]')) {
+                dropdown.classList.add('hidden');
+            }
+        });
+
+        function setSize(val) {
+            document.getElementById('input-size').value = val;
+            document.getElementById('size-dropdown').classList.add('hidden');
+        }
+
+        function initSortable() {
+            const options = { animation: 250, handle: '.drag-handle', onEnd: syncItemsFromLists };
+            new Sortable(document.getElementById('list-mattress'), options);
+            new Sortable(document.getElementById('list-futon'), options);
+        }
+
+        function syncItemsFromLists() {
+            const newItems = [];
+            document.querySelectorAll('.admin-item-card').forEach(card => {
+                const id = parseInt(card.getAttribute('data-id'));
+                const item = items.find(i => i.id === id);
+                if(item) newItems.push(item);
+            });
+            items = newItems;
+            renderPages();
+        }
+
+        function setType(type) {
+            currentType = type;
+            document.getElementById('btn-mattress').className = `flex-1 py-1 rounded-md text-[9px] font-black uppercase transition-all ${type === 'mattress' ? 'active-mattress' : 'text-slate-500'}`;
+            document.getElementById('btn-futon').className = `flex-1 py-1 rounded-md text-[9px] font-black uppercase transition-all ${type === 'futon' ? 'active-futon' : 'text-slate-500'}`;
+            const card = document.getElementById('admin-main-card');
+            card.className = `admin-card-container rounded-2xl shadow-xl border border-slate-200 overflow-hidden ${type === 'mattress' ? 'admin-bg-mattress' : 'admin-bg-futon'}`;
+        }
+
+        function saveItem() {
+            const name = document.getElementById('input-name').value.trim();
+            const size = document.getElementById('input-size').value.trim();
+            const editId = document.getElementById('edit-id').value;
+            if(!name || !size) return;
+
+            const itemData = {
+                type: currentType,
+                name: name,
+                sku: document.getElementById('input-sku').value.trim(),
+                size: size,
+                price: document.getElementById('input-price').value.trim(),
+                preorder: document.getElementById('input-preorder').checked
+            };
+
+            if (editId) {
+                const index = items.findIndex(i => i.id == editId);
+                if (index !== -1) items[index] = { ...itemData, id: parseInt(editId) };
+            } else {
+                items.push({ ...itemData, id: Date.now() });
+            }
+            resetForm();
+            render();
+        }
+
+        function editItem(id) {
+            const item = items.find(i => i.id === id);
+            if (!item) return;
+            setType(item.type);
+            document.getElementById('edit-id').value = item.id;
+            document.getElementById('input-name').value = item.name;
+            document.getElementById('input-sku').value = item.sku;
+            document.getElementById('input-size').value = item.size;
+            document.getElementById('input-price').value = item.price;
+            document.getElementById('input-preorder').checked = item.preorder;
+            document.getElementById('main-action-btn').innerText = 'Зберегти';
+            document.getElementById('cancel-edit-btn').classList.remove('hidden');
+        }
+
+        function resetForm() {
+            document.getElementById('edit-id').value = '';
+            ['input-name', 'input-price', 'input-sku', 'input-size'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('input-preorder').checked = false;
+            document.getElementById('main-action-btn').innerText = 'Додати';
+            document.getElementById('cancel-edit-btn').classList.add('hidden');
+        }
+
+        function removeItem(id, e) {
+            e.stopPropagation();
+            items = items.filter(i => i.id !== id);
+            render();
+        }
+
+        function clearAll() {
+            if(confirm('Очистити все?')) { items = []; render(); }
+        }
+
+        function getPdfConfig(filename) {
+            return {
+                margin: 0,
+                filename: filename,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak: { mode: 'css', before: '.page:not(:first-child)' }
+            };
+        }
+
+        async function prepareForPdf() {
+            window.scrollTo(0, 0);
+            document.body.classList.add('pdf-exporting');
+            void document.body.offsetHeight;
+            return new Promise(resolve => setTimeout(resolve, 300));
+        }
+
+        async function handlePDF(action, type) {
+            renderPages(type);
+            await prepareForPdf();
+            const typeName = type === 'mattress' ? 'Матраци' : 'Футони';
+            const filename = `Прайс_ВІСТА_${typeName}.pdf`;
+            const config = getPdfConfig(filename);
+            const container = document.getElementById('pages-container');
+
+            if (action === 'download') {
+                await html2pdf().set(config).from(container).save();
+            } else {
+                const url = await html2pdf().set(config).from(container).output('bloburl');
+                window.open(url, '_blank');
+            }
+            document.body.classList.remove('pdf-exporting');
+            renderPages();
+        }
+
+        function render() {
+            renderAdminLists();
+            renderPages();
+        }
+
+        function renderAdminLists() {
+            const listM = document.getElementById('list-mattress');
+            const listF = document.getElementById('list-futon');
+            listM.innerHTML = ''; listF.innerHTML = '';
+
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = `admin-item-card type-${item.type} flex items-center p-2.5 bg-white/80 backdrop-blur border border-slate-200 rounded-xl cursor-pointer shadow-sm mb-2`;
+                div.setAttribute('data-id', item.id);
+                div.onclick = (e) => { if (!e.target.closest('button') && !e.target.closest('.drag-handle')) editItem(item.id); };
+                
+                div.innerHTML = `
+                    <div class="drag-handle pr-2 pl-1 text-slate-300">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle></svg>
+                    </div>
+                    <div class="flex-grow grid grid-cols-[1fr_auto_80px] items-center gap-3">
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-[8px] font-black uppercase text-slate-400 mb-0.5 tracking-wider">Артикул: ${item.sku}</span>
+                            <div class="flex items-center gap-1.5 truncate">
+                                <span class="text-[13px] font-black uppercase truncate text-slate-800">${item.name}</span>
+                                ${item.preorder ? '<span class="text-[7px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded-sm font-bold shrink-0">ЗАМОВ.</span>' : ''}
+                            </div>
+                        </div>
+                        <div class="flex justify-center shrink-0">
+                            <span class="text-[14px] font-black text-slate-700 bg-white shadow-sm px-3 py-1 rounded-md border border-slate-100">${item.size}</span>
+                        </div>
+                        <div class="flex justify-end shrink-0">
+                            <span class="text-xs font-black text-slate-900">${item.price} ₴</span>
+                        </div>
+                    </div>
+                    <button onclick="removeItem(${item.id}, event)" class="ml-2 p-1.5 text-slate-300 hover:text-red-500 transition-colors">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                    </button>`;
+                (item.type === 'mattress' ? listM : listF).appendChild(div);
+            });
+        }
+
+        function renderPages(filterType = null) {
+            const container = document.getElementById('pages-container');
+            const template = document.getElementById('page-template');
+            const dateVal = document.getElementById('input-date').value;
+            container.innerHTML = '';
+
+            const MAX_COMPACT = 20; 
+            const NORMAL_LIMIT = 15; 
+
+            const types = { 'mattress': 'МАТРАЦИ', 'futon': 'ФУТОНИ' };
+            
+            Object.entries(types).forEach(([type, title]) => {
+                if (filterType && filterType !== type) return;
+
+                const filtered = items.filter(i => i.type === type);
+                if (!filtered.length) return;
+                
+                let numPages = Math.ceil(filtered.length / MAX_COMPACT);
+                let itemsPerPage = Math.ceil(filtered.length / numPages);
+
+                for (let p = 0; p < numPages; p++) {
+                    const pageItems = filtered.slice(p * itemsPerPage, (p + 1) * itemsPerPage);
+                    const pageNode = template.content.cloneNode(true);
+                    const pageEl = pageNode.querySelector('.page');
+                    
+                    if (pageItems.length > NORMAL_LIMIT) {
+                        pageEl.classList.add('compact-mode');
+                    }
+
+                    let pageTitleHtml = `<span>${title}</span>`;
+                    if (numPages > 1) {
+                        pageTitleHtml += `<span class="text-xl normal-case font-light tracking-normal ml-4 mb-1">лист ${p + 1} з ${numPages}</span>`;
+                    }
+
+                    pageNode.querySelector('.page-title').innerHTML = pageTitleHtml;
+                    pageNode.querySelector('.price-date').innerText = dateVal;
+                    
+                    const list = pageNode.querySelector('.items-container');
+                    pageItems.forEach((item, i) => {
+                        const globalIndex = (p * itemsPerPage) + i + 1;
+                        list.innerHTML += createRow(item, globalIndex);
+                    });
+                    container.appendChild(pageNode);
+                }
+            });
+        }
+
+        function createRow(item, index) {
+            const skuHtml = item.sku ? `<span class="text-[10px] font-normal uppercase tracking-widest whitespace-nowrap flex items-center">Артикул: <span class="sku-text text-sm font-bold ml-1">${item.sku}</span></span>` : '';
+            const preorderHtml = item.preorder ? '<span class="pre-order-tag">ПІД ЗАМОВЛЕННЯ</span>' : '';
+            const priceHtml = item.price ? `<span class="item-price text-3xl font-black tracking-tighter leading-none whitespace-nowrap">${item.price}</span>` : '';
+
+            return `
+                <div class="item-row px-2">
+                    <div class="w-14 shrink-0 flex items-center justify-center mr-2">
+                        <span class="item-num-styled">${index.toString().padStart(2, '0')}</span>
+                    </div>
+                    <div class="flex-grow flex flex-col justify-center min-w-0 pr-4 pl-1">
+                        <div class="flex items-center mb-0.5 overflow-hidden">${skuHtml}${preorderHtml}</div>
+                        <div class="item-name text-3xl font-black uppercase tracking-tighter leading-none truncate overflow-ellipsis">${item.name}</div>
+                    </div>
+                    <div class="flex flex-col items-center justify-center px-2 shrink-0 w-[150px] h-full">
+                        <span class="item-label text-[10px] font-normal uppercase tracking-widest mb-0.5">РОЗМІР</span>
+                        <div class="item-size text-[28px] font-black tracking-tighter leading-none whitespace-nowrap">${item.size}</div>
+                    </div>
+                    <div class="flex flex-col items-end justify-center shrink-0 w-[140px] pl-4">
+                        <span class="item-label text-[10px] font-normal uppercase tracking-widest mb-0.5 block">ЦІНА ГРН</span>
+                        ${priceHtml}
+                    </div>
+                </div>`;
+        }
+    </script>
+
+    <div class="no-print px-4 py-6">
+        <div class="admin-container">
+            <div class="bg-white shadow rounded-xl p-6">
+                <div class="flex flex-col gap-4">
+                    <div>
+                        <button id="spoiler-trigger-1" class="w-full p-3 text-center font-semibold rounded-lg bg-gray-300 hover:bg-gray-400 text-gray-700 transition-colors">Інструкція з використання</button>
+                        <div id="spoiler-content-1" class="text-sm spoiler-content">
+                            <div class="spoiler-dynamic-content p-4 text-left text-gray-700"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <button id="spoiler-trigger-2" class="w-full p-3 text-center font-semibold rounded-lg bg-gray-300 hover:bg-gray-400 text-gray-700 transition-colors">Згенерував Shans для Віста</button>
+                        <div id="spoiler-content-2" class="text-sm spoiler-content">
+                            <div class="spoiler-dynamic-content p-4 text-left text-gray-700"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const instructionText = `
+                <div class="space-y-3 text-gray-700 text-[13px]">
+                    <div class="flex gap-2">
+                        <span class="text-indigo-500 font-black shrink-0">+</span>
+                        <div><span class="font-bold text-gray-900">Додати позицію</span> — обери тип (Матрац / Футон), заповни назву, артикул, розмір і ціну. Розмір можна вибрати зі списку або ввести вручну. Якщо товар під замовлення — постав галочку. Натисни <span class="font-bold">Додати</span>.</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-indigo-500 font-black shrink-0">✎</span>
+                        <div><span class="font-bold text-gray-900">Редагувати</span> — клікни на картку товару в списку. Поля заповняться автоматично — вноси зміни і натискай <span class="font-bold">Зберегти</span>. Щоб скасувати — кнопка <span class="font-bold">Скасувати</span>.</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-indigo-500 font-black shrink-0">⠿</span>
+                        <div><span class="font-bold text-gray-900">Порядок позицій</span> — перетягуй картки за іконку ⠿, щоб змінити послідовність. Саме в такому порядку вони з'являться на прайсі.</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-indigo-500 font-black shrink-0">🗑</span>
+                        <div><span class="font-bold text-gray-900">Видалити</span> — іконка кошика праворуч на картці.</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-indigo-500 font-black shrink-0">📅</span>
+                        <div><span class="font-bold text-gray-900">Дата прайсу</span> — заповнюється автоматично сьогоднішньою датою. Можна змінити вручну — оновиться в усіх сторінках одразу.</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-indigo-500 font-black shrink-0">⬇</span>
+                        <div><span class="font-bold text-gray-900">PDF</span> — окремо для Матраців і Футонів. <span class="font-bold">Завантажити</span> — зберігає файл на комп'ютер. <span class="font-bold">Відкрити</span> — відкриває в новій вкладці для перегляду або друку.</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="text-red-400 font-black shrink-0">✕</span>
+                        <div><span class="font-bold text-gray-900">Очистити все</span> — видаляє всі позиції зі списку. Дані нікуди не зберігаються — після перезавантаження сторінки відновиться початковий прайс із коду.</div>
+                    </div>
+                </div>
+            `;
+            const licenseText = `
+                <p class='text-gray-600'>Бо компанія має оптимізовувати потреби співробітників</p>
+            `;
+            const spoilers = {
+                'spoiler-trigger-1': { contentId: 'spoiler-content-1', text: instructionText },
+                'spoiler-trigger-2': { contentId: 'spoiler-content-2', text: licenseText }
+            };
+            let activeSpoilerId = null;
+            document.querySelectorAll('[id^="spoiler-trigger"]').forEach(trigger => {
+                trigger.addEventListener('click', () => {
+                    const spoilerData = spoilers[trigger.id];
+                    const contentContainer = document.getElementById(spoilerData.contentId);
+                    const dynamicContent = contentContainer.querySelector('.spoiler-dynamic-content');
+                    if (activeSpoilerId === trigger.id) {
+                        dynamicContent.classList.remove('active');
+                        contentContainer.classList.remove('open');
+                        activeSpoilerId = null;
+                    } else {
+                        if (activeSpoilerId) {
+                            const prev = spoilers[activeSpoilerId];
+                            const prevContainer = document.getElementById(prev.contentId);
+                            prevContainer.querySelector('.spoiler-dynamic-content').classList.remove('active');
+                            prevContainer.classList.remove('open');
+                        }
+                        dynamicContent.innerHTML = spoilerData.text;
+                        contentContainer.classList.add('open');
+                        dynamicContent.classList.add('active');
+                        activeSpoilerId = trigger.id;
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
